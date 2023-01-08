@@ -1,0 +1,382 @@
+---
+title: "Driving Factors towards a Great Detective story"
+author: "Yumna Refai and Afra Azad, Detective Wranglers"
+
+date: December 3, 2021
+output: 
+  beamer_presentation:
+    theme: "Pittsburgh"
+    colortheme: "crane"
+    fonttheme: "structurebold"
+    slide_level: 2
+classoption: "aspectratio=169"
+fontsize: 9pt
+urlcolor: blue
+---
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# echo=FALSE will stop the code chunk from appearing in the knit document
+# warning=FALSE and message=FALSE will stop R messages from appearing in the knit document
+library(tidyverse)
+library(data.table)
+library(rpart)  # For classification tree
+library(partykit) # For classification tree
+
+# here is the data for this project
+detectives_full <- read_csv("detective_data.csv")
+
+# see the Project Overview page for more information: 
+# https://q.utoronto.ca/courses/235890/pages/project-overview
+```
+
+
+## Overall Introduction
++ We aim to explore whether different attributes such as the lead detective’s role, presence of fabricated/planted or physical/testimonial evidence, and presence of murder could potentially contribute to a riveting and satisfying detective story. 
+
++ The population we are interested for research questions 1 and 2, is the English detective books in the early 1800s to 1900s. Of these detective books, we will look at the ones with unsolved crimes by the lead detectives as the population for our third research question. 
+
++ The audience we will be presenting our research are to Professor Adam Hammond from the English Department and Professor Simon Stern from the Law Department of The University of Toronto. 
+
++ We will be deepening our research around these three compelling questions in order to help Professors Adam and Simon understand what other features and factors build on a riveting and enthralling detective story.
+
+
+## Research Question 1
+1. Does the presence of fabricated/planted evidence or physical/testimonial evidence predict whether the reader is satisfied with the account of crime and how they were solved?
+
++	When progressing through a novel, planted and fabricated evidence added complexity of the case. Readers may be surprised or need to rethink their analysis of the crime.
++	Many read detective novels to explore the puzzling cases, so these forms of evidence could improve reader satisfaction in terms of the process of how the crimes were solved.
++	As a note, research question 3 revolves around reader satisfaction with the account of crimes and how they were solved, but that still contributes with overall satisfaction with the novel.
+
+## Research Question 1 - Data Summary
++	We used a variable that determines whether or not readers are satisfied with the account of crime, as that will indicate the proportion of readers who are satisfied. Since some of the novels do not have any data for that variable, so we remove those novels form our dataset.
++	Then, we used the presence of planted and/or fabricated evidence variables to determine which novels had those forms of evidence. We changed the variables so novels with both types and novels without any data are categorized as “both” and “none” respectively.
++	Finally, we only selected satisfaction and planted and/or fabricated evidence to simplify our data from only the necessary variables required for our research.
+
+## Research Question 1 - Visualisations
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Create side by side bar plot
+detectives_modified_q1 <- detectives_full
+
+# Change names of variables
+detectives_modified_q1 <- setnames(detectives_modified_q1, "do_you_receive_a_satisfying_narrative_of_account_of_the_crime_s_in_all_their_relevant_details_and_a_summary_of_the_process_by_which_the_crime_s_are_solved", "crime_satisfaction")
+
+detectives_modified_q1 <- setnames(detectives_modified_q1, "presence_of_planted_or_fabricated_evidence", "planted_or_fabricated_evidence")
+
+# Modify dataset
+detectives_modified_q1 <- detectives_modified_q1 %>%
+  filter(!is.na(crime_satisfaction)) %>%
+  mutate(planted_or_fabricated_evidence = case_when(planted_or_fabricated_evidence == "Planted" | 
+                                                      planted_or_fabricated_evidence == "Fabricated" ~ planted_or_fabricated_evidence, 
+                                                    planted_or_fabricated_evidence == "Planted, Fabricated" ~ "Both", 
+                                                    is.na(planted_or_fabricated_evidence) ~ "None")) %>%
+  select(crime_satisfaction, planted_or_fabricated_evidence)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=2, fig.width=4, fig.align='center'}
+plotting_q1 <- detectives_modified_q1 %>%
+  group_by(planted_or_fabricated_evidence) %>%
+  summarise(satisfied_mean = mean(crime_satisfaction == "Yes"))
+
+plotting_q1 %>% 
+  ggplot(aes(x = planted_or_fabricated_evidence, y = satisfied_mean)) +
+  geom_bar(colour = "pink", fill = "pink",stat = "identity") +
+  theme_minimal() +
+  labs(x = "Types of Evidence Present", 
+       y = "Proportion Satisfied",
+       title = "Proportion of Satisfied Readers Based on Evidence Present") +
+  theme(text = element_text(size=8))
+
+```
+
+Figure 1
+
++ The horizontal axis categorizes based on whether a novel contains at least one fabricated, planted, both, and neither type of evidence. The vertical axis states the proportion of readers satisfied with the account for crime and how they were solved.
++	The graph suggests that the proportion of satisfied readers in our data set is similar based on the evidence present. The proportion of satisfied readers do not significantly different in our dataset.
+
+## Research Question 1 - Statistical Methods
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Creating training and testing datasets
+set.seed(094); 
+n <- nrow(detectives_modified_q1)
+training_indices <- sample(1:n, size = round(0.8*n))
+
+detectives_modified_q1 <- detectives_modified_q1 %>% rowid_to_column() # adds a new ID column
+
+train <- detectives_modified_q1 %>% filter(rowid %in% training_indices)
+test <- detectives_modified_q1 %>% filter(!rowid %in% training_indices)
+
+# Creating tree model using training data
+tree_model <- rpart(crime_satisfaction ~ planted_or_fabricated_evidence, data=train)
+
+# Get accuracy results
+test_preds <- predict(tree_model, newdata=test, type="class")
+train_preds <- predict(tree_model, newdata=train, type="class")
+
+tree_model_test <- table(test_preds, test$crime_satisfaction)
+tree_model_train <- table(train_preds, train$crime_satisfaction)
+
+test_accuracy <- sum(diag(tree_model_test)) / sum(tree_model_test)
+train_accuracy <- sum(diag(tree_model_train)) / sum(tree_model_train)
+
+
+```
++	We used a classification tree in our studies. A classification tree determines if the presence of fabricated and/or planted evidence in a novel is more likely to predict if a reader is satisfied with the account of crimes and how they were solved.
++	Firstly, we randomly split around 80% of the data into one data set, referred to as “training”, and 20% to another data set, called “testing”.
++ To create the tree, we need to use data and .
++	Afterwards, we use the model to predict whether or not a reader is satisfied with the account of crime in the novel in the testing dataset. This way we have a better understanding of the accuracy of our model using new data.
++	Since we already know whether the reader is satisfied, we compare the predicted values to actual values with the prediction accuracy rate, sensitivity rate, and specificity rate.
++	The accuracy rate is the correct predictions our of all the prediction and can give as an overall understanding of the effectiveness of our tree. 
++	The sensitivity rate and specificity rate are the proportion of correct predictions when the readers are and aren't satisfied, respectively. 
+
+## Research Question 1 - Results
+
++	The total accuracy rate is around 85.71% for the testing a training data, meaning the tree predicted incorrectly around 14.29% of the time. This indicate that our model was able to correctly predict the reader satisfaction majority of the time.
++	However, the sensitivity rate is 100% overall which means that out of all the novels that were actually satisfying, 100% of the novels that were predicted satisfying were correctly predicted by our model; on the other hand, the specificity rate was 0% for both data sets, which means that out of all the novels that were actually not satisfying, 0% of the novels that were correctly predicted not satisfying.
++	This tree is not accustomed to overfitting, as the total accuracy, sensitivity, and specificity rate between the testing and training dataset means we can use our model for new datasets.
++	The classification tree did not use the presence of fabricated and/or planted evidence to predict the satisfaction outcome. Additionally, the vast majority of readers were satisfied with the account for crimes, so all the novels were predicted as satisfying which explains the extreme sensitivity and specificity score. 
++	This suggests that there isn’t a strong association between the evidence present and reader satisfaction with account for the crime, so the added complexity does not lead to a more satisfying novel. In the development of an enjoyable detective story, the presence of fabricated and planted evidence may not have played as significant role in the evolution of detective fiction.
+
+
+## Research Question 2 
+2. Is there a difference in the mean satisfaction score between the novels with a murder crime and novels with no murder crime?
+
++ We particularly chose to explore this field because we personally enjoy detective fictions that explore murder crimes.
++ It's interesting to find out why a victim was murdered, who was the victim (e.g. children, women or men) and more particularly, how the victim was murdered. Was it a cold blooded murder, a murder feigned to be a suicide, homicide etc. ?
++ Without the element of murder, we personally feel there's no spark to the story.
++ Hence, we wanted to investigate whether an average reader's satisfaction increases when murder is present in the detective story.
++  According to the Data Collection information, for suspected murder, "the main investigation centres on what is suspected to be a murder but in the end is revealed not to be a murder" so we classify suspected murder under the 'no murder' category.
+
+## Research Question 2 - Data Summary
+
++ We used the following variables, type of crimes/quasi crimes present in the story and how satisfying the novel is as a detective fiction in order to carry out our analysis.
++ Our objective is to first classify the novels under the two categories i.e. murder crime present and no murder crime in the story in order to answer our question.
++ To do this, we filtered observations of books containing a murder crime and categorized them to be under the "murder crime present" category and books containing other crimes besides murder such as suspected murder, fraud, blackmail etc. to be under the "no murder crime" category.  
++ Then we concatenated the observations of books with murder present and no murder into one dataset and we filtered out the novels containing missing information about the types of crimes/ quasi crimes present in the story and the mean satisfaction level from this dataset.
+
+
+## Research Question 2 - Visualisations
+```{r, echo=FALSE}
+detectives_full2 <- detectives_full %>% 
+  mutate(suspected_murders = grepl('Suspected', detectives_full$types_of_crimes_or_quasi_crimes_present_in_story), 
+         murders_only = grepl('Murder', detectives_full$types_of_crimes_or_quasi_crimes_present_in_story))
+
+murders <- detectives_full2 %>% 
+  filter(murders_only == TRUE  & !is.na(types_of_crimes_or_quasi_crimes_present_in_story))
+
+not_murder <- detectives_full2 %>% 
+  filter(( murders_only == FALSE & murders_only == FALSE & suspected_murders == TRUE) | !is.na(types_of_crimes_or_quasi_crimes_present_in_story))
+
+detectives_full3 <- rbind(not_murder, murders, deparse.level = 1) %>% 
+filter(!is.na(types_of_crimes_or_quasi_crimes_present_in_story))
+
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=2, fig.width=4, fig.align='center'}
+means_tibble <- detectives_full3 %>% 
+  group_by(murders_only) %>% 
+  summarise(n_obs = n(), mean = mean(how_satisfying_is_this_story_as_a_piece_of_detective_fiction))
+
+ggplot(aes(x = murders_only, y = mean), data = means_tibble) + labs(title = "Mean Satisfaction Level of Novels with Murder and Without Murder",x = "Whether the Novel has a Murder Crime", y = "Mean Satisfaction Level") + geom_bar(color = "tomato3", fill = "tomato2", stat = "identity") + theme(text = element_text(size=9), plot.title = element_text(size=8))
+```
+Figure 2
+
++ The horizontal axis represents novels with murder as indicated by True and without murder as False. The vertical axis represents the
++ The graph shows a marginal decrease in the mean satisfaction level of the book as a detective fiction when the novel has a murder crime compared to when it does not.
+
+
+## Research Question 2 - Statistical Methods
++ The statistical method we are utilizing to investigate this question is the hypothesis testing between two groups. A hypothesis determines whether our dataset is strong enough evidence to suggest that there association between reader satisfaction and presence of murder.
++ Here, we are looking at the difference between mean satisfaction levels of the two groups, books with murder and books with no murder. 
++ To do this, we first present our null hypothesis which assumes there is no association between type of crimes present and reader satisfaction. Our null hypothesis states that there is no difference in the mean satisfaction level of the book as a detective fiction between books with a murder crime and books without a murder crime, and our alternative hypothesis states that there is a difference in the mean satisfaction level of the book as a detective fiction between books with a murder crime and books without a murder crime. 
++ Secondly, we find the difference in means using our observed data and we call this our test statistics which is used to compare with the simulated values. 
++ Then we make 1000 simulations using our modified detective data set assuming that there's no association between murder present in the story and satisfaction level. 
++ We then find a p value which we use in our results to come to a conclusion about the strength of our evidence.
+
+
+
+```{r, echo=FALSE, results= "hide"}
+#Calculating a Test Statistic
+group_means <- detectives_full3 %>% 
+  group_by(murders_only) %>% 
+  summarise(means = mean(how_satisfying_is_this_story_as_a_piece_of_detective_fiction))
+
+diff_means <- group_means %>% 
+  summarise(test_stat = diff(means))
+
+#Performing simulations under the null hypothesis
+set.seed(684)
+repetitions <- 1000
+simulated_values <- rep(NA, repetitions)
+hypothesized_value <- 0
+
+for (i in 1 : repetitions){
+  
+  simdata <- detectives_full3 %>% 
+    mutate(murders_only = sample(murders_only))
+  
+  sim_value <- simdata %>% 
+    group_by(murders_only) %>% 
+    summarise(means = mean(how_satisfying_is_this_story_as_a_piece_of_detective_fiction)) %>% 
+    summarise(value = diff(means))
+  
+  simulated_values[i] <- as.numeric(sim_value)
+}
+sim <- tibble(mean_diff = simulated_values)
+
+#Calculation of p value
+num_more_extreme <- sim %>% 
+  filter(abs(mean_diff) >= abs(diff_means$test_stat)) %>% 
+  summarise(n())
+
+pvalue <- as.numeric(num_more_extreme / repetitions)
+```
+
+
+## Research Question 2 - Results
++ The p value we obtained was 0.399 and the test statistic was -0.097. 
++ If we had simulated test statistics assuming there is no association between detective’s role and reader satisfaction, then around 39.9% of the data will be similar or more extreme than our original test statistic.  
++ Because the p value is larger than 0.05, we would fail to reject the null hypothesis at the  significance level of 0.05. This means that the element of a murder crime within a detective story is unlikely to appeal to readers as much as we expected. 
++ Hence the presence of murder is unlikely to be a factor that determines an enjoyable detective novel so in the development of the detective novel, we are less likely to consider
+murder as an attribute to the birth of an enjoyable, modern detective novel.
+
+## Research Question 3  
+3.	When mysteries are left unsolved in detective novels, is there a difference in mean satisfaction score between the novels with amateur lead detectives versus professional?
+
++ 	The question touches on reader’s relatability with the novel. Often, to create a relatable story, a novel will have an amateur lead detective, so the average reader will view themselves capable of the detective work; however, that could mean readers feel less satisfied when their relatable lead detective is unable to solve the mystery.
+
+## Research Question 3 - Data Summary
+*	We used the following variables, mystery ending, detective 1’s role and satisfaction level to carry out our analysis.
+*	To measure what is “satisfying,” we use the satisfaction score as it refers to the scale at which the readers enjoy the novel as a detective story. It ranges from 0 to 5.
+*	Our population is unsolved mysteries, so we need the mystery ending variable to filter out novels that are not unsolved mysteries.
+*	We are analyzing the novel lead detective’s role, so we removed novels with two lead detectives.
+*	Some of the novels don’t have any information for the variables we need, so we filtered out stories with missing information for the variables, the satisfaction level and detective one’s role.
+*	The detective’s role variables contain information beyond whether the detective is a professional or not; for instance, the detective might work with the police. To simplify, we created a new variable that only states whether the detective is professional or amateur detective, as that is the focus of our question.
+*	Finally, we only choose detective’s role and satisfaction level in our data set, so we have the necessary variables for our research.
+
+## Research Question 3  - Visualisation
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+detectives_modified_q3 <- detectives_full
+
+# Change variable names using function called setnames
+detectives_modified_q3 <- setnames(detectives_modified_q3, "how_satisfying_is_this_story_as_a_piece_of_detective_fiction", "satisfaction_score")
+
+detectives_modified_q3 <- setnames(detectives_modified_q3, "is_the_crime_solved", "is_crime_solved")
+
+detectives_modified_q3 <- setnames(detectives_modified_q3, "detective_number_1_role", "detective_role")
+
+# Modifying Dataset
+detectives_modified_q3 <- detectives_modified_q3 %>%
+  filter(is.na(name_of_detective_number_2) & !is.na(satisfaction_score) & !is.na(is_crime_solved)) %>%
+  filter(is_crime_solved == "No" & detective_role != "Unclear")
+
+detectives_modified_q3 <- detectives_modified_q3 %>%
+  mutate(is_detective_amateur = case_when(detective_role == "Independent amateur" ~ "Amateur",
+                                          detective_role != "Independent amateur" ~ "Professional")) %>%
+  select(satisfaction_score, is_detective_amateur)
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=2, fig.width=4, fig.align='center'}
+plotting_q3 <- detectives_modified_q3 %>%
+  group_by(is_detective_amateur) %>%
+  summarise(satisfied_mean = mean(satisfaction_score))
+
+# Create side by side bar plot
+plotting_q3 %>% 
+  ggplot(aes(x = is_detective_amateur, y = satisfied_mean)) +
+  geom_bar(stat = "identity", fill = "lightseagreen") +
+  theme_minimal() +
+  labs(x = "Lead Detective's Role", 
+       y = "Average Satisfaction Score",
+       title = "Average Satisfaction Score in Amateur and Professional Lead Novels") +
+  theme(text = element_text(size=8), plot.title = element_text(size=8))
+```
+Figure 3
+
++ The horizontal axis divides the bar graphs based on detective’s role (i.e., amateur, and professional lead detective). The vertical axis is the average satisfaction score.
++	The graph suggests that satisfaction score is 0.5 units higher in our sample when the detective novels contain a professional detective compared to when the novels contain an amateur detective , which can mean readers are slightly more satisfied with a professional lead detective novels.
+
+
+## Research Question 3 - Statistical Methods
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Calculate Test Statistic
+test_stat <- detectives_modified_q3 %>%
+  group_by(is_detective_amateur) %>%
+  summarise(satisfied_mean = mean(satisfaction_score)) %>%
+  summarise(difference = diff(satisfied_mean)) %>%
+  as.numeric()
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Setting up simulation
+set.seed(094) 
+repetitions <- 1000
+sim_stats_stored <- rep(NA, repetitions)
+hypothesized_value <- 0
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, cache = TRUE}
+# Creating simulations
+for (i in 1:repetitions){
+  new_sim_tibble <- detectives_modified_q3 %>%
+    mutate(satisfaction_score = sample(satisfaction_score))
+  
+  sim_val <- new_sim_tibble %>%
+    group_by(is_detective_amateur) %>%
+    summarise(satisfied_mean = mean(satisfaction_score)) %>%
+    summarise(difference = diff(satisfied_mean)) %>%
+    as.numeric()
+  
+  sim_stats_stored[i] <- sim_val 
+}
+
+sim_tibble <- tibble(sim_stats_col = sim_stats_stored)
+
+#Calculation of p value
+p_value <- sim_tibble %>%
+filter(abs(sim_stats_col - hypothesized_value) >= abs(test_stat - hypothesized_value)) %>%
+summarise(p_value = n() / repetitions) %>%
+as.numeric()
+
+
+```
+
+*	We conducted a hypothesis test to explore our research question. We question whether the lead detective’s role is a factor that determines a satisfying detective novel, so in a hypothesis test we try to determine if our sample is strong enough evidence to suggest that it could be a factor.
+*	The null hypothesis is for our research question in English detective novels from the early 1800s to 1900s, there is no difference between the mean satisfaction level between amateur and professional lead novel.
++	Then, we calculate the test statistic around 0.53, which is the difference between the readers average satisfaction score in amateur and professional led detective novels. The test statistics is crucial to see if our sample is strong enough evidence against the assumption of no association between the variables (satisfaction score and detective’s role).
+*	We created a simulated 1000 statistics, under the assumption that there is no association between the variables and obtained a p-value. The p-value is the likelihood of getting a similar or more extreme test statistic if we assumed there was no association between the variables.
+
+## Research Question 3 - Results
+
++	Our test statistic is around 0.533, which aligns with our approximation in figure 3.
++	In our hypothesis test, a p value less than 0.05 considered the test statistics as strong evidence for an association, but we obtain p = 0.582.
++	Our p-values means that if we had test statistics assuming there is no association between detective’s role and reader satisfaction, then around 58.2% of the data will be similar and/or more extreme than our original test statistic. 
++	Additionally, we have weak evidence against the null hypothesis that states there is no association between the detective's role and reader satisfaction, as 0.582 > 0.05.
++	This means our data set does not suggest readers are more satisfied when the lead detective is an amateur verse professional.
++	Now we know that the reader’s relatability to the lead detective, may not be one of the factors that contribute to a satisfying novel based on our sample.
++	When developing an enjoyable detective story, the detective’s role might have not played as significant role in the development of an enjoyable detective story.
+
+
+## Limitations
++	Our population is modern readers, but our sample are short detective stories read by University of Toronto students in English courses which is not a representative sample of modern readers nor detective novels. We should not use our results as universal for all readers and mystery novels.
++ For our hypothesis test, if the p-value is less than 0.05, then we would have significant enough evidence against the null hypothesis. However, 0.05 is an arbitrary industry standard level, so we cannot truly say if we have significant enough evidence or not.
++	The satisfaction score is an arbitrary scale, so what is considered very satisfying differ from students; therefore, our average satisfaction score does not exactly indicate the average “true satisfaction”.
++	We conducted our research on novels with one lead detective, so our results cannot be applied to novels with more than one lead.
++	What is considered a satisfying novel with the account of crimes is subjective, so what is considered satisfying differs based on the student. The proportion of satisfied readers does not indicate the "true" mean satisfaction score.
++	Most readers were satisfied with the novel with the account of crimes; however, if we have an even proportion for satisfying and not satisfying novels, then the presence of planted/ fabricated evidence may have a larger impact on reader satisfaction.
++	A classification tree only uses a particular variable for prediction if it improves prediction accuracy by an arbitrary small amount. Since it is arbitrary, we don’t know if the presence of fabricated and planted evidence has any impact on reader satisfaction, so our results do not mean that there is truly no association between the two variables. 
+
+## Conclusions
+
++	We originally set out to determine whether murder crimes, the presence of fabricated and/or planted evidence, and the lead detective’s role is associated with reader satisfaction. However, we have discovered that there is no association for all those factors based on our methodologies.
++ There were several limitations with our research as mentioned, so these factors can be explored with different methodologies and samples. 
++	Nevertheless, since we know these factors are less likely to contribute to a satisfying novel, the development of an enjoyable detective novel is less likely to not revolve around murder crimes, the presence of fabricated and/or planted evidence, and the lead detective’s role. 
++ However, there are various other factors left to explore in determining the birth of a modern, enjoyable detective novel such as the types of clues, the number of words before the reveal etc. 
+
+
